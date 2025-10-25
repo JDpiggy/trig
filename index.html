@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Jaron's Random Trigonometry Practice</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background: #f2f3f7;
+    min-height: 100vh;
+    margin: 0;
+    padding: 0;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  #timer {
+    position: absolute;
+    top: 10px;
+    right: 20px;
+    font-size: 1.2em;
+    color: #333;
+  }
+  h1 { margin-top: 60px; margin-bottom: 30px; }
+  #mainbox {
+    margin: auto; 
+    padding: 30px 30px 10px 30px;
+    background: white;
+    border-radius: 0;
+    border: 1px solid black;
+    box-shadow: 0 8px 40px #0001;
+    max-width: 500px;
+    width: 100%;
+  }
+  #problem {
+    font-size: 1.8em;
+    margin: 25px 0 30px 0;
+  }
+  #answer, .quizAns {
+    font-size: 1.2em;
+    padding: 6px;
+    width: 220px;
+    text-align: center;
+    margin-bottom: 10px;
+    border-radius: 0;
+    border: 1px solid black;
+  }
+  #buttons, #feedback, #quizSummary { text-align: center; }
+  button {
+    padding: 8px 14px;
+    margin: 7px 7px 7px 0;
+    font-size: 1em;
+    border-radius: 0;
+    cursor: pointer;
+    border: 1px solid black;
+    background:#f3f3ff;
+    transition:.2s;
+  }
+  button:active { background: #dbeafe; }
+  #feedback {
+    font-weight: bold;
+    margin-top: 18px;
+    min-height: 2.3em;
+  }
+  #quizButton {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 10;
+    background: #a3cef1;
+    color: #194773;
+    font-weight: bold;
+    letter-spacing: 0.03em;
+    border-radius: 0;
+    border: 1px solid black;
+    box-shadow: 0 3px 20px #0135;
+  }
+  #quizArea, #quizSummary {
+    text-align:center;
+    width: 100%;
+    margin:auto;
+    max-width:650px;
+    margin-top:20px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+  }
+  th, td {
+    border: 1px solid #aaa;
+    padding: 8px;
+    font-size:1.05em;
+  }
+  th { background: #e4e4ee; }
+  .centered { text-align: center; }
+</style>
+</head>
+<body>
+
+<div id="timer">Time: 0.0s</div>
+<h1>Jaron's Random Trigonometry Practice</h1>
+<div id="mainbox">
+  <div id="problem"></div>
+  <input type="text" id="answer" placeholder="Enter answer">
+  <div id="buttons">
+      <button onclick="insertSymbol('√')">√</button>
+      <button onclick="insertSymbol('/')">/</button>
+  </div>
+  <div>
+    <button id="checkBtn" onclick="checkAnswer()">Check Answer</button>
+    <button onclick="generateProblem()">New Problem</button>
+  </div>
+  <div id="feedback"></div>
+  <div id="quizArea" style="display:none"></div>
+  <div id="quizSummary"></div>
+</div>
+<button id="quizButton" onclick="startQuiz()">10 Question Practice Quiz</button>
+
+<script>
+const trigFunctions = ['sin', 'cos', 'tan', 'csc', 'sec', 'cot'];
+const exactAngles = [30, 45, 60];
+let currentFunc, currentAngle, currentAnswer, currentDisplayAngle;
+let quizMode = false, quiz = [], quizIndex = 0, quizStartTime = 0, questionStartTime = 0, timerInterval;
+
+// Utility: GCD for simplifying fractions
+function gcd(a, b) {
+  return b === 0 ? a : gcd(b, a % b);
+}
+
+// Generates an angle in any quadrant, formats for display, and returns both
+function createAngleForProblem() {
+    const refAngle = exactAngles[Math.floor(Math.random() * exactAngles.length)];
+    const quadrant = Math.floor(Math.random() * 4); // 0 for Q1, 1 for Q2, etc.
+    let angle = [refAngle, 180 - refAngle, 180 + refAngle, 360 - refAngle][quadrant];
+
+    // Add coterminal & negative variations
+    if (Math.random() < 0.4) {
+      angle += (Math.floor(Math.random() * 3) - 1) * 360;
+    }
+    if (angle > 0 && Math.random() < 0.2) {
+      angle *= -1;
+    }
+
+    const usePi = Math.random() < 0.5;
+    let displayAngle;
+
+    if (usePi && angle !== 0) { // Radian display
+        const commonDivisor = gcd(Math.abs(angle), 180);
+        let num = angle / commonDivisor;
+        let den = 180 / commonDivisor;
+        if (den === 1) {
+            displayAngle = (num === 1 ? '' : (num === -1 ? '-' : num)) + 'π';
+        } else {
+            displayAngle = (num === 1 ? '' : (num === -1 ? '-' : num)) + `π/${den}`;
+        }
+    } else { // Degree display
+        displayAngle = `${angle}°`;
+    }
+    return { angle, displayAngle };
+}
+
+
+function startTimer(reset=false) {
+  if (reset) window.startTime = Date.now();
+  clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    const diff = ((quizMode && quizStartTime ? quizStartTime : window.startTime)
+      ? (Date.now() - (quizMode ? quizStartTime : window.startTime)) : 0) / 1000;
+    document.getElementById('timer').innerText = `Time: ${diff.toFixed(1)}s`;
+  }, 100);
+}
+
+// Quadrant and Sign: Work for any degree input, set correct sign for answer
+function toPositiveAngle(angle) { 
+  return ((angle % 360) + 360) % 360; 
+}
+
+function referenceAngle(angle) {
+  const a = toPositiveAngle(angle);
+  if (a <= 90) return a;
+  if (a <= 180) return 180 - a;
+  if (a <= 270) return a - 180;
+  return 360 - a;
+}
+
+function getQuadrant(angle) {
+  const a = toPositiveAngle(angle);
+  if (a === 0 || a === 360) return 1;
+  if (a > 0 && a < 90) return 1;
+  if (a > 90 && a < 180) return 2;
+  if (a > 180 && a < 270) return 3;
+  if (a > 270 && a < 360) return 4;
+  // Handle axis cases
+  if (a === 90) return 2;
+  if (a === 180) return 2;
+  if (a === 270) return 3;
+  return 1;
+}
+
+function functionSign(func, quadrant) {
+  if (quadrant === 1) return 1;
+  if (quadrant === 2) return (func === 'sin' || func === 'csc') ? 1 : -1;
+  if (quadrant === 3) return (func === 'tan' || func === 'cot') ? 1 : -1;
+  if (quadrant === 4) return (func === 'cos' || func === 'sec') ? 1 : -1;
+  return 1;
+}
+
+function lookupExactValue(func, refAngle) {
+  const valMap = {
+    30: {sin:'1/2', cos:'√3/2', tan:'√3/3', csc:'2', sec:'2√3/3', cot:'√3'},
+    45: {sin:'√2/2', cos:'√2/2', tan:'1', csc:'√2', sec:'√2', cot:'1'},
+    60: {sin:'√3/2', cos:'1/2', tan:'√3', csc:'2√3/3', sec:'2', cot:'√3/3'}
+  };
+  return valMap[refAngle][func];
+}
+
+function getExactValue(func, questionAngle) {
+  const refA = referenceAngle(questionAngle);
+  let usedRef;
+  if (Math.abs(refA-30)<1) usedRef = 30;
+  else if (Math.abs(refA-45)<1) usedRef = 45;
+  else if (Math.abs(refA-60)<1) usedRef = 60;
+  else return "Undefined"; // Should not happen with current angle generation
+  
+  const q = getQuadrant(questionAngle);
+  const sign = functionSign(func, q);
+  const v = lookupExactValue(func, usedRef);
+  return (sign === -1 && v !== '0' ? '-' : '') + v;
+}
+
+// --------- Main (Single) Mode -------------
+function generateProblem() {
+  if (quizMode) return;
+  document.getElementById('feedback').innerText = '';
+  startTimer(true);
+
+  const func = trigFunctions[Math.floor(Math.random() * trigFunctions.length)];
+  const problemData = createAngleForProblem();
+
+  currentFunc = func;
+  currentAngle = problemData.angle;
+  currentDisplayAngle = problemData.displayAngle;
+  currentAnswer = getExactValue(func, currentAngle);
+
+  document.getElementById('problem').innerText = `What is ${func}(${currentDisplayAngle})?`;
+  document.getElementById('answer').value = '';
+}
+
+function checkAnswer() {
+  const userAns = document.getElementById('answer').value.replace(/\s+/g, '');
+  const correct = currentAnswer.replace(/\s+/g, '');
+  const out = document.getElementById('feedback');
+
+  if (userAns === correct)
+    out.innerText = '✅ Correct!';
+  else
+    out.innerText = `❌ Incorrect. Correct answer: ${currentAnswer}`;
+}
+
+function insertSymbol(sym) {
+  const input = document.getElementById('answer');
+  input.value += sym;
+  input.focus();
+}
+
+// ---------------- QUIZ MODE ----------------
+function startQuiz() {
+  quizMode = true;
+  quiz = [];
+  quizIndex = 0;
+  quizStartTime = Date.now();
+  document.getElementById('quizSummary').innerHTML = '';
+  document.getElementById('checkBtn').style.display = 'none';
+  document.getElementById('problem').innerText = '';
+  document.getElementById('feedback').innerText = '';
+  document.getElementById('answer').style.display = 'none';
+  document.getElementById('buttons').style.display = 'none';
+  
+  const quizButton = document.getElementById('quizButton');
+  quizButton.textContent = 'Return to Regular Practice';
+  quizButton.onclick = resetQuiz;
+
+  nextQuizQuestion();
+  startTimer(true);
+}
+
+function nextQuizQuestion() {
+  if (quizIndex === 10) return finishQuiz();
+
+  const func = trigFunctions[Math.floor(Math.random() * trigFunctions.length)];
+  const problemData = createAngleForProblem();
+  const correct = getExactValue(func, problemData.angle);
+
+  quiz[quizIndex] = { func, angle: problemData.angle, displayAngle: problemData.displayAngle, correct, user:'', time:0 };
+  questionStartTime = Date.now();
+
+  document.getElementById('quizArea').style.display = 'block';
+  document.getElementById('quizArea').innerHTML = `
+    <h2>(${quizIndex+1}/10) What is ${func}(${problemData.displayAngle})?</h2>
+    <input type="text" class="quizAns" id="quizAns" placeholder="Enter answer"><br>
+    <button onclick="insertQuizSymbol('√')">√</button>
+    <button onclick="insertQuizSymbol('/')">/</button><br>
+    <button onclick="recordQuizAnswer()">Next</button>
+  `;
+  document.getElementById('quizAns').focus();
+}
+
+function insertQuizSymbol(sym) {
+  const input = document.getElementById('quizAns');
+  input.value += sym;
+  input.focus();
+}
+
+function recordQuizAnswer() {
+  const user = document.getElementById('quizAns').value.replace(/\s+/g, '');
+  quiz[quizIndex].user = user;
+  quiz[quizIndex].time = (Date.now() - questionStartTime)/1000;
+  quizIndex++;
+  nextQuizQuestion();
+}
+
+function finishQuiz() {
+  clearInterval(timerInterval);
+  document.getElementById('quizArea').style.display = 'none';
+
+  let correctCount = 0, totalTime = 0;
+  quiz.forEach(q => {
+    totalTime += q.time;
+    if (q.user === q.correct.replace(/\s+/g,'')) correctCount++;
+  });
+
+  const rows = quiz.map((q,i)=>`
+    <tr>
+      <td>${i+1}</td>
+      <td>${q.func}(${q.displayAngle})</td>
+      <td>${q.user || '—'}</td>
+      <td>${q.correct}</td>
+      <td>${q.user === q.correct.replace(/\s+/g,'') ? '✅' : '❌'}</td>
+      <td>${q.time.toFixed(1)}s</td>
+    </tr>`).join('');
+
+  document.getElementById('quizSummary').innerHTML = `
+    <h2>Quiz Results</h2>
+    <table>
+      <tr><th>#</th><th>Question</th><th>Your Answer</th><th>Correct</th><th>✓/✗</th><th>Time</th></tr>
+      ${rows}
+    </table>
+    <p><strong>Score:</strong> ${correctCount}/10 <br>
+    <strong>Total Time:</strong> ${totalTime.toFixed(1)}s</p>
+    <button onclick="startQuiz()">Practice Again</button>
+  `;
+}
+
+function resetQuiz() {
+  quizMode = false;
+  document.getElementById('answer').style.display = '';
+  document.getElementById('buttons').style.display = '';
+  document.getElementById('checkBtn').style.display = '';
+  document.getElementById('quizSummary').innerHTML = '';
+  document.getElementById('quizArea').style.display = 'none';
+
+  const quizButton = document.getElementById('quizButton');
+  quizButton.textContent = '10 Question Practice Quiz';
+  quizButton.onclick = startQuiz;
+  
+  generateProblem();
+}
+
+// Initialize app
+generateProblem();
+</script>
+</body>
+</html>
